@@ -14,6 +14,7 @@ impl TaskId {
     }
 }
 
+/// A asynchronos path of execution, the fundamental building block of the Runtime.
 pub struct Task {
     pub(crate) id: TaskId,
     pub(crate) future: Pin<Box<dyn Future<Output = ()>>>,
@@ -27,8 +28,8 @@ impl Task {
         };
     }
 
+    /// polls the asynchronos task
     pub fn poll(&mut self, cx: &mut Context) -> Poll<()> {
         return self.future.as_mut().poll(cx);
     }
 }
-

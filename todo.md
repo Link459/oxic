@@ -1,1 +1,2 @@
 - [] automatically run the executor while processing the rest, for that spawn a thread of the executor loop to decouple it from the rest,
+- [] docs

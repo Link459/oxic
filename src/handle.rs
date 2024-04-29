@@ -8,23 +8,21 @@ use core::{
 use alloc::sync::Arc;
 use crossbeam_queue::ArrayQueue;
 
-use crate::task::TaskId;
-
+/// An owned permissoin to wait until a [Task](crate::task::Task) is driven to completion
 pub struct JoinHandle<T> {
-    id: TaskId,
     rx: Arc<ArrayQueue<T>>,
     _phantom_data: PhantomData<fn() -> T>,
 }
 
 impl<T> JoinHandle<T> {
-    pub fn new(id: TaskId, rx: Arc<ArrayQueue<T>>) -> Self {
+    pub fn new(rx: Arc<ArrayQueue<T>>) -> Self {
         Self {
-            id,
             rx,
             _phantom_data: PhantomData,
         }
     }
 
+    /// waits for the [Task](crate::task::Task) to be driven to completion and returns its result
     pub fn join(&self) -> T {
         loop {
             match self.rx.pop() {
@@ -35,10 +33,11 @@ impl<T> JoinHandle<T> {
     }
 }
 
+/// see [JoinHandle::join](struct.JoinHandle.html#method.join)
 impl<T> Future for JoinHandle<T> {
     type Output = T;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         return Poll::Ready(self.join());
     }
 }

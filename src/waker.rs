@@ -5,6 +5,7 @@ use crossbeam_queue::SegQueue;
 
 use crate::task::TaskId;
 
+/// A naive waker used for Signaling to the Executor that a Task can continue
 pub struct TaskWaker {
     id: TaskId,
     task_queue: Arc<SegQueue<TaskId>>,

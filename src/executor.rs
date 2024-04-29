@@ -3,6 +3,8 @@ use core::{
     panic,
     task::{Context, Poll, Waker},
 };
+extern crate std;
+use std::sync::Mutex;
 
 use alloc::{collections::BTreeMap, sync::Arc};
 
@@ -13,11 +15,15 @@ use crate::{
 };
 use crossbeam_queue::{ArrayQueue, SegQueue};
 
+/// A Executor
 pub struct Executor {
     tasks: BTreeMap<TaskId, Task>,
-    task_queue: Arc<SegQueue<TaskId>>,
+    pub(crate) task_queue: Arc<SegQueue<TaskId>>,
     waker_cache: BTreeMap<TaskId, Waker>,
 }
+
+//should be safe since it's always in a Arc<Mutex<T>> and there is only one thread polling it
+unsafe impl Send for Executor {}
 
 impl Executor {
     pub fn new() -> Self {
@@ -28,6 +34,8 @@ impl Executor {
         };
     }
 
+    /// spawns a [Task] onto the executor and polls it once. After that it will continue
+    /// execution asynchronously
     pub fn spawn<Fut, T>(&mut self, f: Fut) -> JoinHandle<T>
     where
         Fut: Future<Output = T> + 'static,
@@ -49,9 +57,10 @@ impl Executor {
 
         self.task_queue.push(id);
         self.run_task(id);
-        return JoinHandle::new(id, queue);
+        return JoinHandle::new(queue);
     }
 
+    /// [spawn](Self::spawn<Fut,T>()) a [Task] in a blocking manner
     pub fn block_on<Fut, T>(&mut self, f: Fut) -> T
     where
         Fut: Future<Output = T> + 'static,
@@ -68,7 +77,7 @@ impl Executor {
         }
     }
 
-    fn run_task(&mut self, id: TaskId) {
+    pub(crate) fn run_task(&mut self, id: TaskId) {
         let task = match self.tasks.get_mut(&id) {
             Some(task) => task,
             None => return,
@@ -88,12 +97,26 @@ impl Executor {
             Poll::Pending => (),
         }
     }
+}
 
+impl Default for Executor {
+    fn default() -> Self {
+        return Self::new();
+    }
+}
+
+pub(crate) fn run_executor(ex: Arc<Mutex<Executor>>) -> impl Fn() {
+    move || loop {
+        let mut ex = ex.lock().unwrap();
+        while let Some(id) = ex.task_queue.pop() {
+            ex.run_task(id);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use alloc::sync::Arc;
+    use alloc::{string::String, sync::Arc};
 
     use crossbeam_queue::SegQueue;
 
@@ -111,5 +134,16 @@ mod tests {
         ex.spawn(hello());
         //ex.run();
         assert_eq!(q.pop().unwrap(), "Hello");
+    }
+
+    #[test]
+    fn with_return() {
+        async fn hello() -> String {
+            return String::from("Hello");
+        }
+
+        let mut ex = Executor::new();
+        let res = ex.block_on(hello());
+        assert_eq!(res, "Hello");
     }
 }
