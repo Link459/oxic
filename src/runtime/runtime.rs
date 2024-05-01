@@ -3,20 +3,25 @@ use std::{sync::Mutex, thread};
 
 use alloc::sync::Arc;
 
-use crate::{
-    executor::{self, Executor},
+use crate::runtime::{
+    executor::executor::{self, Executor},
     handle::JoinHandle,
 };
+
+use super::reactor::reactor::Reactor;
 
 pub struct Runtime {
     executor: Arc<Mutex<Executor>>,
 }
 
 impl Runtime {
+    // initializes the runtime and starts the executor loop
     pub fn new() -> Self {
         let rt = Self {
             executor: Arc::new(Mutex::new(Executor::new())),
         };
+
+        let _ = Reactor::get();
 
         let ex = rt.executor.clone();
 
@@ -24,6 +29,7 @@ impl Runtime {
         return rt;
     }
 
+    #[inline(always)]
     pub fn spawn<Fut, T>(&mut self, f: Fut) -> JoinHandle<T>
     where
         Fut: Future<Output = T> + 'static,
@@ -32,6 +38,7 @@ impl Runtime {
         return self.executor.lock().unwrap().spawn(f);
     }
 
+    #[inline(always)]
     pub fn block_on<Fut, T>(&mut self, f: Fut) -> T
     where
         Fut: Future<Output = T> + 'static,
@@ -51,7 +58,7 @@ impl Default for Runtime {
 mod tests {
     use core::{assert_eq, future::Future, task::Poll};
 
-    use crate::runtime::Runtime;
+    use crate::prelude::Runtime;
 
     struct TestFuture {
         pub counter: u32,

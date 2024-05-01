@@ -3,7 +3,7 @@ use core::task::Waker;
 use alloc::{sync::Arc, task::Wake};
 use crossbeam_queue::SegQueue;
 
-use crate::task::TaskId;
+use crate::runtime::task::task::TaskId;
 
 /// A naive waker used for Signaling to the Executor that a Task can continue
 pub struct TaskWaker {

@@ -1,2 +1,4 @@
-- [] automatically run the executor while processing the rest, for that spawn a thread of the executor loop to decouple it from the rest,
-- [] docs
+- [] add support for epoll or similar
+- [] generic reactor support
+
+- [] io and net operations

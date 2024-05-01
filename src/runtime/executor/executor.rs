@@ -3,17 +3,19 @@ use core::{
     panic,
     task::{Context, Poll, Waker},
 };
-extern crate std;
-use std::sync::Mutex;
+use std::{ sync::Mutex};
 
 use alloc::{collections::BTreeMap, sync::Arc};
 
-use crate::{
-    handle::JoinHandle,
-    task::{Task, TaskId},
-    waker::TaskWaker,
-};
 use crossbeam_queue::{ArrayQueue, SegQueue};
+
+use crate::{
+    prelude::JoinHandle,
+    runtime::{
+        task::task::{Task, TaskId},
+        waker::TaskWaker,
+    },
+};
 
 /// A Executor
 pub struct Executor {
@@ -69,14 +71,6 @@ impl Executor {
         return self.spawn(f).join();
     }
 
-    pub fn run(&mut self) -> ! {
-        loop {
-            while let Some(id) = self.task_queue.pop() {
-                self.run_task(id);
-            }
-        }
-    }
-
     pub(crate) fn run_task(&mut self, id: TaskId) {
         let task = match self.tasks.get_mut(&id) {
             Some(task) => task,
@@ -105,6 +99,7 @@ impl Default for Executor {
     }
 }
 
+#[inline(always)]
 pub(crate) fn run_executor(ex: Arc<Mutex<Executor>>) -> impl Fn() {
     move || loop {
         let mut ex = ex.lock().unwrap();

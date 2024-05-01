@@ -15,12 +15,16 @@
 //! ```
 extern crate alloc;
 
-pub mod executor;
-pub mod handle;
 pub mod runtime;
-pub mod task;
-pub mod waker;
+
+pub mod io;
+pub mod net;
+pub mod fs;
 
 pub mod prelude {
-    pub use crate::{executor::Executor, handle::JoinHandle, runtime::Runtime, task::Task};
+    pub use crate::runtime::runtime::Runtime;
+    pub use crate::{
+        runtime::executor::executor::Executor, runtime::handle::JoinHandle,
+        runtime::task::task::Task,
+    };
 }
