@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
-use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -37,7 +37,6 @@ pub fn from_std(sock: StdUdpSocket) -> Self {
     //TODO: somehow implement this
     pub fn into_std(self) -> StdUdpSocket {
         let fd = self.socket.as_raw_fd();
-        //(*self.socket).into_raw_fd();
         return unsafe { StdUdpSocket::from_raw_fd(fd) };
     }
 
