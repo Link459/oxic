@@ -8,3 +8,7 @@ crossbeam-queue = { version ="0.3.11", features = ["alloc"] }
 epoll = "4.3.3"
 lockfree = { version = "0.5.1" }
 oxic-macros = { path = "oxic-macros" }
+
+[[example]]
+name = "main"
+path = "examples/main.rs"

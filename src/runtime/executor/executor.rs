@@ -3,18 +3,16 @@ use core::{
     panic,
     task::{Context, Poll, Waker},
 };
-use std::{ sync::Mutex};
+use std::sync::Mutex;
 
 use alloc::{collections::BTreeMap, sync::Arc};
 
 use crossbeam_queue::{ArrayQueue, SegQueue};
 
-use crate::{
-    prelude::JoinHandle,
-    runtime::{
-        task::task::{Task, TaskId},
-        waker::TaskWaker,
-    },
+use crate::runtime::{
+    handle::JoinHandle,
+    task::task::{Task, TaskId},
+    waker::TaskWaker,
 };
 
 /// A Executor
@@ -43,23 +41,27 @@ impl Executor {
         Fut: Future<Output = T> + 'static,
         T: 'static,
     {
-        let queue = Arc::new(ArrayQueue::new(1));
-        let queue2 = queue.clone();
+        let result_reciever = Arc::new(ArrayQueue::new(1));
+        let result_sender = result_reciever.clone();
         let fut = async move {
             let v = f.await;
-            let _ = queue2.push(v);
-            //.expect("unexpected error, queue should not be full");
+            match result_sender.push(v) {
+                Ok(_) => (),
+                Err(_) => panic!("queue should never be full at this point"),
+            };
         };
 
         let task = Task::new(fut);
         let id = task.id;
         if self.tasks.insert(id, task).is_some() {
-            panic!("task already exists");
+            // this should never be reached since the TaskId is atomically incremented with each
+            // call so getting the same twice here is impossible
+            unreachable!();
         }
 
         self.task_queue.push(id);
         self.run_task(id);
-        return JoinHandle::new(queue);
+        return JoinHandle::new(result_reciever);
     }
 
     /// [spawn](Self::spawn<Fut,T>()) a [Task] in a blocking manner
@@ -140,5 +142,23 @@ mod tests {
         let mut ex = Executor::new();
         let res = ex.block_on(hello());
         assert_eq!(res, "Hello");
+    }
+
+    #[test]
+    fn nested() {
+        async fn bottom() -> u32 {
+            7
+        }
+
+        async fn middle() -> u32 {
+            bottom().await
+        }
+        async fn top() -> u32 {
+            middle().await
+        }
+
+        let mut ex = Executor::new();
+        let res = ex.block_on(top());
+        assert_eq!(res, 7);
     }
 }

@@ -1,10 +1,9 @@
 use std::{os::fd::RawFd, sync::OnceLock, task::Waker, thread};
 
 use super::{
-    epoll::Epoll,
-    interest::{epoll_interest, Interest},
+    interest::{Event, Interest},
+    poller::Poller,
 };
-use epoll::Event;
 use lockfree::map::Map;
 
 struct Subscription {
@@ -20,14 +19,14 @@ impl Subscription {
 
 pub struct Reactor {
     subscribtions: Map<i32, Subscription>,
-    epoll: Epoll,
+    poller: Poller,
 }
 
 impl Reactor {
     pub fn new() -> Reactor {
         return Self {
             subscribtions: Map::new(),
-            epoll: Epoll::new(),
+            poller: Poller::new(),
         };
     }
 
@@ -42,8 +41,9 @@ impl Reactor {
     pub fn register(&self, fd: RawFd, waker: Waker, interest: Interest) {
         let sub = Subscription::new(waker, interest);
         self.subscribtions.insert(fd, sub);
-        self.epoll
-            .add_interest(fd, epoll_interest(fd as u64, interest))
+        let event = Event::new(fd, interest);
+        self.poller
+            .add_interest(event)
             .expect("failed to add interest to epoll queue");
     }
 
@@ -52,20 +52,23 @@ impl Reactor {
             .subscribtions
             .remove(&fd)
             .expect("failed to remove from epoll queue");
-        self.epoll
-            .remove_interest(fd, Event::new(rem.1.interest.into(), fd as u64))
+        self.poller
+            .remove_interest(Event::new(fd, rem.1.interest))
             .expect("failed to remove from epoll queue");
     }
 
     fn wait(&self, mut buf: &mut Vec<Event>) -> Vec<Waker> {
-        buf.clear();
+        //buf.clear();
         let mut wakers = Vec::new();
         loop {
-            let n = self.epoll.wait(None, &mut buf).unwrap();
+            let n = self
+                .poller
+                .wait(None, &mut buf)
+                .expect("failed to wait for events");
 
-            assert_eq!(n, buf.len());
+            assert_eq!(n.0, buf.len());
             for event in buf.iter() {
-                let fd = event.data;
+                let fd = event.fd;
                 let sub = self
                     .subscribtions
                     .remove(&(fd as i32))
@@ -78,12 +81,64 @@ impl Reactor {
         }
     }
 
+    pub fn run(&self) {
+        let mut buf = Vec::with_capacity(1024);
+        buf.resize(1024, Event::default());
+        dbg!(buf.len());
+        loop {
+            let wakers = self.wait(&mut buf);
+            wakers.iter().for_each(Waker::wake_by_ref);
+        }
+    }
+
     pub fn reactor_loop() {
         let reactor = Self::get();
         let mut buf = Vec::with_capacity(1024);
+        buf.resize(1024, Event::default());
         loop {
             let wakers = reactor.wait(&mut buf);
             wakers.iter().for_each(Waker::wake_by_ref);
         }
+    }
+}
+
+mod tests {
+    use std::{
+        net::UdpSocket,
+        os::fd::{AsRawFd, RawFd},
+        sync::Arc,
+        task::{Wake, Waker},
+    };
+
+    use crate::runtime::reactor::interest::Interest;
+
+    use super::Reactor;
+
+    struct TestWaker;
+    impl Wake for TestWaker {
+        fn wake(self: Arc<Self>) {
+            println!("woken up")
+        }
+
+        fn wake_by_ref(self: &Arc<Self>) {
+            println!("woken up")
+        }
+    }
+
+    #[test]
+    pub fn register_fd() {
+        let reactor = Reactor::new();
+
+        let socket = UdpSocket::bind("127.0.0.1:3006").unwrap();
+        let fd = socket.as_raw_fd();
+        reactor.register(fd, Waker::from(Arc::new(TestWaker {})), Interest::Read);
+    }
+
+pub fn run_reactor() {
+        let reactor = Reactor::new();
+
+        let socket = UdpSocket::bind("127.0.0.1:3006").unwrap();
+        let fd = socket.as_raw_fd();
+        reactor.register(fd, Waker::from(Arc::new(TestWaker {})), Interest::Read);
     }
 }
