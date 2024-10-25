@@ -30,10 +30,6 @@ impl Epoll {
             Some(x) => x as i32,
         };
 
-        dbg!(timeout);
-        //let events =
-        dbg!(events.len());
-
         return epoll::wait(self.0, timeout, events);
     }
 

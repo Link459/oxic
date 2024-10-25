@@ -8,7 +8,7 @@ use core::{
 use alloc::sync::Arc;
 use crossbeam_queue::ArrayQueue;
 
-/// An owned permissoin to wait until a [Task](crate::task::Task) is driven to completion
+/// An owned permission to wait until a [Task](crate::task::Task) is driven to completion
 pub struct JoinHandle<T> {
     rx: Arc<ArrayQueue<T>>,
     _phantom_data: PhantomData<fn() -> T>,

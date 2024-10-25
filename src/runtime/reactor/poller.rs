@@ -34,13 +34,12 @@ impl Poller {
         timeout: Option<u32>,
         events: &mut [Event],
     ) -> io::Result<(usize, Vec<Event>)> {
-        dbg!(events.len());
         match self {
             Poller::Epoll(epoll) => {
                 let mut epoll_buf = Vec::with_capacity(events.len());
                 epoll_buf.resize(events.len(), epoll::Event::new(epoll::Events::empty(), 0));
                 let size = epoll.wait(timeout, &mut epoll_buf)?;
-                let res = epoll_buf.iter().map(Event::from).collect();
+                let res: Vec<_> = epoll_buf.iter().map(Event::from).collect();
                 return Ok((size, res));
             }
         };

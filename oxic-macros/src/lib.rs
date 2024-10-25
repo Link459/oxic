@@ -23,7 +23,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let result = quote::quote! {
         fn main() {
             #item
-            let mut ex = oxic::prelude::Executor::new();
+            let mut ex = oxic::prelude::Runtime::new();
             ex.block_on(
             #fn_name()
                 );

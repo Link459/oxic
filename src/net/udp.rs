@@ -14,8 +14,6 @@ pub struct UdpSocket {
 }
 
 impl UdpSocket {
-    
-
     pub fn bind<A>(addr: A) -> io::Result<Self>
     where
         A: ToSocketAddrs,
@@ -28,7 +26,7 @@ impl UdpSocket {
         });
     }
 
-pub fn from_std(sock: StdUdpSocket) -> Self {
+    pub fn from_std(sock: StdUdpSocket) -> Self {
         return Self {
             socket: Arc::new(sock),
         };
@@ -40,39 +38,40 @@ pub fn from_std(sock: StdUdpSocket) -> Self {
         return unsafe { StdUdpSocket::from_raw_fd(fd) };
     }
 
-    pub async fn connect<A: ToSocketAddrs>(&self, addr: A) -> io::Result<()> {
+    pub fn connect<A: ToSocketAddrs>(&self, addr: A) -> Connect<A> {
         let connect = Connect {
             socket: self.socket.clone(),
             addr,
         };
 
-        return connect.await;
+        return connect;
     }
 
-    pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn recv<'a>(&self, buf: &'a mut [u8]) -> Recv<'a> {
         let recv = Recv {
             socket: self.socket.clone(),
             buf,
         };
-        return recv.await;
+        return recv;
     }
 
-    pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+    pub fn recv_from<'a>(&self, buf: &'a mut [u8]) -> RecvFrom<'a> {
         let recv_from = RecvFrom {
             socket: self.socket.clone(),
             buf,
         };
-        return recv_from.await;
+        return recv_from;
     }
 
-    pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
+    pub fn send<'a>(&self, buf: &'a [u8]) -> Send<'a> {
         let send = Send {
             socket: self.socket.clone(),
             buf,
         };
-        return send.await;
+        return send;
     }
-    pub async fn send_to<A>(&self, buf: &[u8], addr: A) -> io::Result<usize>
+
+    pub fn send_to<'a, A>(&self, buf: &'a [u8], addr: A) -> SendTo<'a, A>
     where
         A: ToSocketAddrs,
     {
@@ -81,11 +80,11 @@ pub fn from_std(sock: StdUdpSocket) -> Self {
             addr,
             buf,
         };
-        return send_to.await;
+        return send_to;
     }
 }
 
-struct Connect<A> {
+pub struct Connect<A> {
     socket: Arc<StdUdpSocket>,
     addr: A,
 }
@@ -99,7 +98,11 @@ where
         return match self.socket.connect(&self.addr) {
             Ok(x) => Poll::Ready(Ok(x)),
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                cx.waker().wake_by_ref();
+                Reactor::get().register(
+                    self.socket.as_raw_fd(),
+                    cx.waker().clone(),
+                    Interest::ReadWrite,
+                );
                 return Poll::Pending;
             }
             Err(e) => Poll::Ready(Err(e)),
@@ -107,7 +110,7 @@ where
     }
 }
 
-struct Recv<'a> {
+pub struct Recv<'a> {
     socket: Arc<StdUdpSocket>,
     buf: &'a mut [u8],
 }
@@ -115,10 +118,10 @@ struct Recv<'a> {
 impl Future for Recv<'_> {
     type Output = io::Result<usize>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        println!("polling of stuff");
         return match self.socket.clone().recv(&mut self.buf) {
             Ok(x) => Poll::Ready(Ok(x)),
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                //cx.waker().wake_by_ref();
                 Reactor::get().register(
                     self.socket.as_raw_fd(),
                     cx.waker().clone(),
@@ -131,7 +134,7 @@ impl Future for Recv<'_> {
     }
 }
 
-struct RecvFrom<'a> {
+pub struct RecvFrom<'a> {
     socket: Arc<StdUdpSocket>,
     buf: &'a mut [u8],
 }
@@ -142,7 +145,6 @@ impl Future for RecvFrom<'_> {
         return match self.socket.clone().recv_from(&mut self.buf) {
             Ok(x) => Poll::Ready(Ok(x)),
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                //cx.waker().wake_by_ref();
                 Reactor::get().register(
                     self.socket.as_raw_fd(),
                     cx.waker().clone(),
@@ -155,7 +157,7 @@ impl Future for RecvFrom<'_> {
     }
 }
 
-struct Send<'a> {
+pub struct Send<'a> {
     socket: Arc<StdUdpSocket>,
     buf: &'a [u8],
 }
@@ -166,7 +168,6 @@ impl Future for Send<'_> {
         return match self.socket.clone().send(&self.buf) {
             Ok(x) => Poll::Ready(Ok(x)),
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                //cx.waker().wake_by_ref();
                 Reactor::get().register(
                     self.socket.as_raw_fd(),
                     cx.waker().clone(),
@@ -179,7 +180,7 @@ impl Future for Send<'_> {
     }
 }
 
-struct SendTo<'a, A> {
+pub struct SendTo<'a, A> {
     socket: Arc<StdUdpSocket>,
     addr: A,
     buf: &'a [u8],
@@ -194,7 +195,6 @@ where
         return match self.socket.clone().send_to(&self.buf, &self.addr) {
             Ok(x) => Poll::Ready(Ok(x)),
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                //cx.waker().wake_by_ref();
                 Reactor::get().register(
                     self.socket.as_raw_fd(),
                     cx.waker().clone(),

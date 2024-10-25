@@ -6,6 +6,7 @@ use super::{
 };
 use lockfree::map::Map;
 
+#[derive(Debug, Clone)]
 struct Subscription {
     waker: Waker,
     interest: Interest,
@@ -39,8 +40,10 @@ impl Reactor {
     }
 
     pub fn register(&self, fd: RawFd, waker: Waker, interest: Interest) {
-        let sub = Subscription::new(waker, interest);
-        self.subscribtions.insert(fd, sub);
+        // we need to clone this subsription here otherwise we get problem registering the fd for
+        // some weird reason, cannot be bothered to find why it actually fails
+        let sub = Subscription::new(waker.clone(), interest);
+        let _ = self.subscribtions.insert(fd, sub);
         let event = Event::new(fd, interest);
         self.poller
             .add_interest(event)
@@ -57,27 +60,24 @@ impl Reactor {
             .expect("failed to remove from epoll queue");
     }
 
-    fn wait(&self, mut buf: &mut Vec<Event>) -> Vec<Waker> {
-        //buf.clear();
-        let mut wakers = Vec::new();
-        loop {
-            let n = self
-                .poller
-                .wait(None, &mut buf)
-                .expect("failed to wait for events");
+    fn wait(&self, mut buf: &mut Vec<Event>) {
+        let n = self
+            .poller
+            .wait(None, &mut buf)
+            .expect("failed to wait for events");
 
-            assert_eq!(n.0, buf.len());
-            for event in buf.iter() {
-                let fd = event.fd;
-                let sub = self
-                    .subscribtions
-                    .remove(&(fd as i32))
-                    .expect("subscription should exist");
-                self.remove(fd as i32);
-
-                wakers.push(sub.1.waker.clone());
-            }
-            return wakers;
+        for i in 0..n.0 {
+            let event = n.1[i];
+            let fd = event.fd;
+            let sub = self
+                .subscribtions
+                .remove(&fd)
+                .expect("subscription should exist");
+            self.poller
+                .remove_interest(Event::new(fd, sub.1.interest))
+                .expect("failed to remove from epoll queue");
+            println!("notifing waker");
+            sub.1.waker.wake_by_ref();
         }
     }
 
@@ -86,8 +86,7 @@ impl Reactor {
         buf.resize(1024, Event::default());
         dbg!(buf.len());
         loop {
-            let wakers = self.wait(&mut buf);
-            wakers.iter().for_each(Waker::wake_by_ref);
+            self.wait(&mut buf);
         }
     }
 
@@ -96,8 +95,7 @@ impl Reactor {
         let mut buf = Vec::with_capacity(1024);
         buf.resize(1024, Event::default());
         loop {
-            let wakers = reactor.wait(&mut buf);
-            wakers.iter().for_each(Waker::wake_by_ref);
+            reactor.wait(&mut buf);
         }
     }
 }
@@ -134,7 +132,7 @@ mod tests {
         reactor.register(fd, Waker::from(Arc::new(TestWaker {})), Interest::Read);
     }
 
-pub fn run_reactor() {
+    pub fn run_reactor() {
         let reactor = Reactor::new();
 
         let socket = UdpSocket::bind("127.0.0.1:3006").unwrap();

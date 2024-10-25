@@ -60,7 +60,7 @@ impl Executor {
         }
 
         self.task_queue.push(id);
-        self.run_task(id);
+        //self.task_queue.push(id);
         return JoinHandle::new(result_reciever);
     }
 
@@ -76,8 +76,12 @@ impl Executor {
     pub(crate) fn run_task(&mut self, id: TaskId) {
         let task = match self.tasks.get_mut(&id) {
             Some(task) => task,
-            None => return,
+            None => {
+                return;
+            }
         };
+
+        assert_eq!(task.id, id);
 
         let waker = self
             .waker_cache
@@ -90,7 +94,7 @@ impl Executor {
                 self.tasks.remove(&id);
                 self.waker_cache.remove(&id);
             }
-            Poll::Pending => (),
+            Poll::Pending => return,
         }
     }
 }
@@ -103,9 +107,10 @@ impl Default for Executor {
 
 #[inline(always)]
 pub(crate) fn run_executor(ex: Arc<Mutex<Executor>>) -> impl Fn() {
+    println!("running executor");
     move || loop {
         let mut ex = ex.lock().unwrap();
-        while let Some(id) = ex.task_queue.pop() {
+        if let Some(id) = ex.task_queue.pop() {
             ex.run_task(id);
         }
     }

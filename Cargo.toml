@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 crossbeam-queue = { version ="0.3.11", features = ["alloc"] }
+crossbeam-deque = "0.8.5" 
 epoll = "4.3.3"
 lockfree = { version = "0.5.1" }
 oxic-macros = { path = "oxic-macros" }
@@ -12,3 +13,11 @@ oxic-macros = { path = "oxic-macros" }
 [[example]]
 name = "main"
 path = "examples/main.rs"
+
+[[example]]
+name = "counting"
+path = "examples/async_counting.rs"
+
+[[example]]
+name = "udp"
+path = "examples/udp.rs"

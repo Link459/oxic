@@ -1,5 +1,8 @@
 use core::future::Future;
-use std::{sync::Mutex, thread};
+use std::{
+    sync::Mutex,
+    thread::{self},
+};
 
 use alloc::sync::Arc;
 
@@ -10,22 +13,49 @@ use crate::runtime::{
 
 use super::reactor::reactor::Reactor;
 
+pub struct RuntimeBuilder {
+    num_threads: usize,
+}
+
+impl RuntimeBuilder {
+    pub fn new() -> Self {
+        return Self {
+            num_threads: 1, //std::thread::available_parallelism().unwrap().into(),
+        };
+    }
+
+    pub fn threads(mut self, num_threads: usize) -> Self {
+        self.num_threads = num_threads;
+        return self;
+    }
+
+    pub fn build(self) -> Runtime {
+        return Runtime::from_builder(self);
+    }
+}
+
 pub struct Runtime {
     executor: Arc<Mutex<Executor>>,
 }
 
 impl Runtime {
-    // initializes the runtime and starts the executor loop
     pub fn new() -> Self {
+        let builder = RuntimeBuilder::new();
+        return builder.build();
+    }
+
+    pub fn from_builder(builder: RuntimeBuilder) -> Self {
         let rt = Self {
             executor: Arc::new(Mutex::new(Executor::new())),
         };
 
         let _ = Reactor::get();
 
-        let ex = rt.executor.clone();
+        for _ in 0..builder.num_threads {
+            println!("spawning executor loop");
+            let _ = thread::spawn(executor::run_executor(rt.executor.clone()));
+        }
 
-        thread::spawn(executor::run_executor(ex));
         return rt;
     }
 
@@ -95,5 +125,16 @@ mod tests {
         let mut rt = Runtime::new();
         let b = rt.block_on(two_times());
         assert_eq!(b, false);
+    }
+
+    #[test]
+    fn panic() {
+        async fn does_panic() {
+            panic!("panic happened");
+        }
+
+        let mut rt = Runtime::new();
+        let err = std::panic::catch_unwind(move || rt.spawn(does_panic()));
+        assert!(err.is_err());
     }
 }
