@@ -223,8 +223,8 @@ mod test {
 
     #[test]
     pub fn send() {
-        let mut ex = Executor::new();
-        ex.block_on(async {
+        let mut rt = Runtime::new();
+        rt.block_on(async {
             let sock1 = StdUdpSocket::bind("127.0.0.1:3000").unwrap();
             let sock2 = UdpSocket::bind("127.0.0.1:3001").unwrap();
             sock2.connect("127.0.0.1:3000").await.unwrap();
@@ -240,8 +240,8 @@ mod test {
 
     #[test]
     pub fn send_to() {
-        let mut ex = Executor::new();
-        ex.block_on(async {
+        let mut rt = Runtime::new();
+        rt.block_on(async {
             let sock1 = StdUdpSocket::bind("127.0.0.1:3002").unwrap();
             let sock2 = UdpSocket::bind("127.0.0.1:3003").unwrap();
             let buf = "hello".as_bytes();
